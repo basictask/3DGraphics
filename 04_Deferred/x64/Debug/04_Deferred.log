@@ -1,0 +1,17 @@
+﻿  gCamera.cpp
+  GLconversions.cpp
+  GLDebugMessageCallback.cpp
+  Mesh_OGL3.cpp
+  ObjParser_OGL3.cpp
+  ProgramObject.cpp
+  ShaderObject.cpp
+  VertexArrayObject.cpp
+  main.cpp
+  MyApp.cpp
+C:\Users\Daniel Kuknyo\Documents\ELTE\2\Computer Graphics\ComputerGraphics\ComputerGraphics\04_Deferred\MyApp.cpp(19,31): warning C4305: 'argument': truncation from 'double' to 'GLclampf'
+C:\Users\Daniel Kuknyo\Documents\ELTE\2\Computer Graphics\ComputerGraphics\ComputerGraphics\04_Deferred\MyApp.cpp(112,96): warning C4244: 'argument': conversion from 'double' to 'float', possible loss of data
+C:\Users\Daniel Kuknyo\Documents\ELTE\2\Computer Graphics\ComputerGraphics\ComputerGraphics\04_Deferred\MyApp.cpp(182,46): warning C4312: 'type cast': conversion from 'GLuint' to 'ImTextureID' of greater size
+C:\Users\Daniel Kuknyo\Documents\ELTE\2\Computer Graphics\ComputerGraphics\ComputerGraphics\04_Deferred\MyApp.cpp(183,46): warning C4312: 'type cast': conversion from 'GLuint' to 'ImTextureID' of greater size
+C:\Users\Daniel Kuknyo\Documents\ELTE\2\Computer Graphics\ComputerGraphics\ComputerGraphics\04_Deferred\MyApp.cpp(184,46): warning C4312: 'type cast': conversion from 'GLuint' to 'ImTextureID' of greater size
+  Generating Code...
+  04_Deferred.vcxproj -> C:\Users\Daniel Kuknyo\Documents\ELTE\2\Computer Graphics\ComputerGraphics\ComputerGraphics\x64\Debug\04_Deferred.exe
