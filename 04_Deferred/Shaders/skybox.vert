@@ -11,7 +11,7 @@ uniform mat4 MVP;
 
 void main()
 {
-	gl_Position = (MVP * vec4( vs_in_pos, 1 )).xyww;	// [x,y,w,w] => after homogeneous division [x/w, y/w, 1]
+	gl_Position = MVP * vec4(vs_in_pos, 0).xyzw;	// [x,y,w,w] => after homogeneous division [x/w, y/w, 1]
 
 	vs_out_pos = vs_in_pos;
 }

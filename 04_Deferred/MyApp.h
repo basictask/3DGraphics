@@ -46,6 +46,7 @@ protected:
 	// FBO creating function
 	void CreateFrameBuffer(int width, int height);
 	void DrawScene(const glm::mat4& viewProj, ProgramObject& program);
+	void DrawSkyBox(const glm::mat4& viewProj, ProgramObject& program);
 
 	// variables for shaders
 	ProgramObject		m_program;				// basic program for shaders

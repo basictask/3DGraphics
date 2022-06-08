@@ -18,7 +18,9 @@ bool CMyApp::Init()
 {
 	glClearColor(0.2, 0.4, 0.7, 1);	// Clear color is bluish
 	glEnable(GL_CULL_FACE);			// Drop faces looking backwards
-	glEnable(GL_DEPTH_TEST);		// Enable depth test
+	glEnable(GL_DEPTH_TEST);			// Enable depth test
+	//glDisable(GL_DEPTH_TEST);			// Enable depth test
+	glEnable(GL_DEPTH_CLAMP);		// Enable depth clamp
 
 	m_program.Init({			// Shader for drawing geometries
 		{ GL_VERTEX_SHADER,   "Shaders/myVert.vert" },
@@ -36,12 +38,7 @@ bool CMyApp::Init()
 	if (glGetError() != GL_NO_ERROR) { std::cout << "Error after shader compilation.\n"; exit(1); }
 
 	// Defining geometry
-	// 
 	// Position of vertices:
-	/*	The constructor of cube_positions has already created a GPU buffer identifier, and the following BufferData call will
-		1. bind this to GL_ARRAY_BUFFER (because the type of cube_positions is ArrayBuffer) and
-		2. upload the values of the container given in the argument to the GPU by calling glBufferData
-	*/
 	static ArrayBuffer cube_positions(std::vector<glm::vec3>{
 		/*back face:*/	glm::vec3(-1, -1, -1), glm::vec3(1, -1, -1), glm::vec3(1, 1, -1), glm::vec3(-1, 1, -1),
 		/*front face:*/	glm::vec3(-1, -1, 1),  glm::vec3(1, -1,  1), glm::vec3(1, 1,  1), glm::vec3(-1, 1,  1),
@@ -56,6 +53,18 @@ bool CMyApp::Init()
 
 	// Registering geometry in VAO
 	m_cube_vao.Init({ {CreateAttribute<0, glm::vec3, 0, sizeof(glm::vec3)>, cube_positions} }, cube_indices);
+
+	// Skybox cubemap
+	glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+	m_skyboxTexture.AttachFromFile("Assets/xpos.png", false, GL_TEXTURE_CUBE_MAP_POSITIVE_X);
+	m_skyboxTexture.AttachFromFile("Assets/xneg.png", false, GL_TEXTURE_CUBE_MAP_NEGATIVE_X);
+	m_skyboxTexture.AttachFromFile("Assets/ypos.png", false, GL_TEXTURE_CUBE_MAP_POSITIVE_Y);
+	m_skyboxTexture.AttachFromFile("Assets/yneg.png", false, GL_TEXTURE_CUBE_MAP_NEGATIVE_Y);
+	m_skyboxTexture.AttachFromFile("Assets/zpos.png", false, GL_TEXTURE_CUBE_MAP_POSITIVE_Z);
+	m_skyboxTexture.AttachFromFile("Assets/zneg.png", true, GL_TEXTURE_CUBE_MAP_NEGATIVE_Z);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
 	// Creating VBOs for the quad
 	ArrayBuffer positions(std::vector<glm::vec3>{glm::vec3(-20, 0, -20), glm::vec3(-20, 0, 20), glm::vec3(20, 0, -20), glm::vec3(20, 0, 20)});
@@ -75,18 +84,6 @@ bool CMyApp::Init()
 
 	// Loading texture
 	m_mesh = ObjParser::parse("Assets/Suzanne.obj");
-
-	// Skybox cubemap
-	glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
-	m_skyboxTexture.AttachFromFile("Assets/xpos.png", false, GL_TEXTURE_CUBE_MAP_POSITIVE_X);
-	m_skyboxTexture.AttachFromFile("Assets/xneg.png", false, GL_TEXTURE_CUBE_MAP_NEGATIVE_X);
-	m_skyboxTexture.AttachFromFile("Assets/ypos.png", false, GL_TEXTURE_CUBE_MAP_POSITIVE_Y);
-	m_skyboxTexture.AttachFromFile("Assets/yneg.png", false, GL_TEXTURE_CUBE_MAP_NEGATIVE_Y);
-	m_skyboxTexture.AttachFromFile("Assets/zpos.png", false, GL_TEXTURE_CUBE_MAP_POSITIVE_Z);
-	m_skyboxTexture.AttachFromFile("Assets/zneg.png", true, GL_TEXTURE_CUBE_MAP_NEGATIVE_Z);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
 	// Camera
 	m_camera.SetProj(45.0f, 640.0f / 480.0f, 0.01f, 1000.0f);
@@ -119,28 +116,47 @@ void CMyApp::Update()
 	last_time = SDL_GetTicks();
 }
 
+void CMyApp::DrawSkyBox(const glm::mat4& viewProj, ProgramObject& program)
+{
+	// Save the last Z-test, namely the relation by which we update the pixel.
+	GLint prevDepthFnc;
+	glGetIntegerv(GL_DEPTH_FUNC, &prevDepthFnc);
+
+	// Now we use less-then-or-equal, because we push everything to the far clipping plane
+	glDepthFunc(GL_LEQUAL);
+	m_cube_vao.Bind();
+	m_programSkybox.Use();
+	m_programSkybox.SetUniform("MVP", m_camera.GetViewProj() * glm::translate(m_camera.GetEye()));
+
+	// Set the cube map texture to the 0th sampler (in the shader too)
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, m_skyboxTexture);
+	glUniform1i(m_programSkybox.GetLocation("skyboxTexture"), 0);
+
+	glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_SHORT, 0);
+	glDepthFunc(prevDepthFnc); // Finally set it back
+}
+
 void CMyApp::DrawScene(const glm::mat4& viewProj, ProgramObject& program)
 {
 	program.Use();
-	
+
 	// Only texture information is needed, no lights.
 	program.SetTexture("texImage", 0, m_textureMetal);
-	
-	// Drawing the plane underneath
 
+	// Drawing the plane underneath
 	program.SetUniform("MVP", viewProj * glm::mat4(1));
 	program.SetUniform("world", glm::mat4(1));
 	program.SetUniform("worldIT", glm::mat4(1));
 
 	m_vao.Bind();
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);	//Draws exactly the same but uses index buffer:
-	//glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, nullptr);
 	m_vao.Unbind();
 
 	// Suzanne wall
-
 	float t = SDL_GetTicks() / 1000.f;
-	for (int i = -1; i <= 1; ++i)
+	for (int i = -1; i <= 1; ++i) 
+	{
 		for (int j = -1; j <= 1; ++j)
 		{
 			glm::mat4 suzanneWorld = glm::translate(glm::vec3(4 * i, 4 * (j + 1), sinf(t * 2 * M_PI * i * j)));
@@ -149,24 +165,22 @@ void CMyApp::DrawScene(const glm::mat4& viewProj, ProgramObject& program)
 			program.SetUniform("worldIT", glm::transpose(glm::inverse(suzanneWorld)));
 			m_mesh->draw();
 		}
+	}
+
 	program.Unuse();
 }
 
 void CMyApp::Render()
 {
-
 	// 1.
 	// Render to the framebuffer
-
 	glBindFramebuffer(GL_FRAMEBUFFER, m_frameBuffer);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
+	
 	DrawScene(m_camera.GetViewProj(), m_program);
 
-	// 2.
-	// Draw Lights by additions
-	
-	//2.1. Setting up the blending
+	// 2. Draw Lights by additions
+	// 2.1. Setting up the blending
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glClearColor(0, 0, 0, 1);		//Clear to black
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -179,14 +193,12 @@ void CMyApp::Render()
 	glBlendFunc(GL_ONE, GL_ONE);	// summing the contribution of each light source
 
 	// 2.2. Light program setup
-
 	m_deferredPointlight.Use();
 	m_deferredPointlight.SetTexture("diffuseTexture" , 0, m_diffuseBuffer);
 	m_deferredPointlight.SetTexture("normalTexture"  , 1, m_normalBuffer);
 	m_deferredPointlight.SetTexture("positionTexture", 2, m_position_Buffer);
 	
 	// 2.3. Draw point lights
-
 	m_deferredPointlight.SetUniform("lightPos", m_light_pos);
 	m_deferredPointlight.SetUniform("Ld", glm::vec4(1,0.8,0.5,1));
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); // First light
@@ -195,44 +207,18 @@ void CMyApp::Render()
 	m_deferredPointlight.SetUniform("lightPos", 10.f*glm::vec3(cosf(t),0.5,sinf(t)));
 	m_deferredPointlight.SetUniform("Ld", glm::vec4(0.5, 1, 1, 1));
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); // Second light
-
-	// 2.4. Undo the blending options
-
+	
+	// 3. Skybox
+	DrawSkyBox(m_camera.GetViewProj(), m_program);
+	
+	// Undo the blending options
 	glEnable(GL_DEPTH_TEST);
 	glDepthMask(GL_TRUE);
 	glDisable(GL_BLEND);
 
-	// Skybox
-	// Save the last Z-test, namely the relation by which we update the pixel.
-	GLint prevDepthFnc;
-	glGetIntegerv(GL_DEPTH_FUNC, &prevDepthFnc);
-
-	// Now we use less-then-or-equal, because we push everything to the far clipping plane
-	glDepthFunc(GL_LEQUAL);
-
-	m_cube_vao.Bind();
-
-	m_programSkybox.Use();
-	m_programSkybox.SetUniform("MVP", m_camera.GetViewProj() * glm::translate(m_camera.GetEye()));
-
-	// Set the cube map texture to the 0th sampler (in the shader too)
-	glActiveTexture(GL_TEXTURE0);
-	glBindTexture(GL_TEXTURE_CUBE_MAP, m_skyboxTexture);
-	glUniform1i(m_programSkybox.GetLocation("skyboxTexture"), 0);
-
-	// The last 3 rows <=> m_programSkybox.SetCubeTexture("skyboxTexture", 0, m_skyboxTexture);
-
-	glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_SHORT, 0);
-
-	// Finally set it back
-	glDepthFunc(prevDepthFnc);
-
-	// 3.
+	// 4.
 	// User Interface
 	ImGui::ShowTestWindow(); // Demo of all ImGui commands. See its implementation for details.
-		// It's worth browsing imgui.h, as well as reading the FAQ at the beginning of imgui.cpp.
-		// There is no regular documentation, but the things mentioned above should be sufficient.
-
 	ImGui::SetNextWindowPos(ImVec2(300, 400), ImGuiSetCond_FirstUseEver);
 	if(ImGui::Begin("Test window")) // Note that ImGui returns false when window is collapsed so we can early-out
 	{
@@ -241,8 +227,7 @@ void CMyApp::Render()
 		ImGui::Image((ImTextureID)m_normalBuffer   , ImVec2(256, 256), ImVec2(0,1), ImVec2(1,0));
 		ImGui::Image((ImTextureID)m_position_Buffer, ImVec2(256, 256), ImVec2(0,1), ImVec2(1,0));
 	}
-	ImGui::End(); // In either case, ImGui::End() needs to be called for ImGui::Begin().
-		// Note that other commands may work differently and may not need an End* if Begin* returned false.
+	ImGui::End();
 }
 
 void CMyApp::KeyboardDown(SDL_KeyboardEvent& key)

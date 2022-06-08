@@ -86,7 +86,7 @@ inline void TextureObject<type>::AttachFromFile(const std::string& filename, boo
 		loaded_img->w,			// width
 		loaded_img->h,			// height
 		0,						// must be 0 ( https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glTexImage2D.xhtml )
-		source_format,			// source (CPU side) format
+		img_mode,			// source (CPU side) format
 		GL_UNSIGNED_BYTE,		// data type of the pixel data (CPU side)
 		loaded_img->pixels);	// pointer to the data
 
