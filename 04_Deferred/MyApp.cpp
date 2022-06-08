@@ -28,11 +28,42 @@ bool CMyApp::Init()
 		{ 1, "vs_in_normal" },	// VAO index 1 will be vs_in_normal
 		{ 2, "vs_out_tex0"	},	// VAO index 2 will be vs_in_tex0
 	}*/);
-
+	m_programSkybox.Init({
+		{ GL_VERTEX_SHADER,			"Shaders/skybox.vert" },
+		{ GL_FRAGMENT_SHADER,		"Shaders/skybox.frag" }
+	});
 	m_deferredPointlight.Init({ // A deferred shader for point lights
 		{ GL_VERTEX_SHADER,		"Shaders/deferredPoint.vert" },
 		{ GL_FRAGMENT_SHADER,	"Shaders/deferredPoint.frag" }
 	});
+
+	if (glGetError() != GL_NO_ERROR) { std::cout << "Error after shader compilation.\n"; exit(1); }
+
+	//
+	// Defining geometry (std::vector<...>) and upload to GPU buffers (m_buffer*) with BufferData
+	//
+
+	// Position of vertices:
+	/*	The constructor of cube_positions has already created a GPU buffer identifier, and the following BufferData call will
+		1. bind this to GL_ARRAY_BUFFER (because the type of cube_positions is ArrayBuffer) and
+		2. upload the values of the container given in the argument to the GPU by calling glBufferData
+	*/
+
+	static ArrayBuffer cube_positions(std::vector<glm::vec3>{
+		/*back face:*/	glm::vec3(-1, -1, -1), glm::vec3(1, -1, -1), glm::vec3(1, 1, -1), glm::vec3(-1, 1, -1),
+			/*front face:*/	glm::vec3(-1, -1, 1), glm::vec3(1, -1, 1), glm::vec3(1, 1, 1), glm::vec3(-1, 1, 1),
+	});
+
+	// And the indices which the primitives are constructed by (from the arrays defined above) - prepared to draw them as a triangle list
+	// !!!! Unfortunately OpenGL or the driver does not view the index buffer as an attachment to the VAO so it is would be deleted normally
+	static IndexBuffer cube_indices(std::vector<uint16_t>{
+		/*back: */ 0, 1, 2, 2, 3, 0, /*front:*/ 4, 6, 5, 6, 4, 7,
+			/*left: */ 0, 3, 4, 4, 3, 7, /*right:*/ 1, 5, 2, 5, 6, 2,
+			/*bottom:*/1, 0, 4, 1, 4, 5, /*top:  */ 3, 2, 6, 3, 6, 7,
+	});
+
+	// Registering geometry in VAO
+	m_cube_vao.Init({ {CreateAttribute<0, glm::vec3, 0, sizeof(glm::vec3)>, cube_positions} }, cube_indices);
 
 	// Creating VBOs for the quad
 	ArrayBuffer positions(std::vector<glm::vec3>{glm::vec3(-20, 0, -20), glm::vec3(-20, 0, 20), glm::vec3(20, 0, -20), glm::vec3(20, 0, 20)});
@@ -52,6 +83,18 @@ bool CMyApp::Init()
 
 	// Loading texture
 	m_mesh = ObjParser::parse("Assets/Suzanne.obj");
+
+	// Skybox cubemap
+	glEnable(GL_TEXTURE_CUBE_MAP_SEAMLESS);
+	m_skyboxTexture.AttachFromFile("Assets/xpos.png", false, GL_TEXTURE_CUBE_MAP_POSITIVE_X);
+	m_skyboxTexture.AttachFromFile("Assets/xneg.png", false, GL_TEXTURE_CUBE_MAP_NEGATIVE_X);
+	m_skyboxTexture.AttachFromFile("Assets/ypos.png", false, GL_TEXTURE_CUBE_MAP_POSITIVE_Y);
+	m_skyboxTexture.AttachFromFile("Assets/yneg.png", false, GL_TEXTURE_CUBE_MAP_NEGATIVE_Y);
+	m_skyboxTexture.AttachFromFile("Assets/zpos.png", false, GL_TEXTURE_CUBE_MAP_POSITIVE_Z);
+	m_skyboxTexture.AttachFromFile("Assets/zneg.png", true, GL_TEXTURE_CUBE_MAP_NEGATIVE_Z);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
 	// Camera
 	m_camera.SetProj(45.0f, 640.0f / 480.0f, 0.01f, 1000.0f);
@@ -96,7 +139,6 @@ void CMyApp::DrawScene(const glm::mat4& viewProj, ProgramObject& program)
 	program.SetUniform("MVP", viewProj * glm::mat4(1));
 	program.SetUniform("world", glm::mat4(1));
 	program.SetUniform("worldIT", glm::mat4(1));
-
 
 	m_vao.Bind();
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);	//Draws exactly the same but uses index buffer:
@@ -168,9 +210,33 @@ void CMyApp::Render()
 	glDepthMask(GL_TRUE);
 	glDisable(GL_BLEND);
 
+	// Skybox
+	// Save the last Z-test, namely the relation by which we update the pixel.
+	GLint prevDepthFnc;
+	glGetIntegerv(GL_DEPTH_FUNC, &prevDepthFnc);
+
+	// Now we use less-then-or-equal, because we push everything to the far clipping plane
+	glDepthFunc(GL_LEQUAL);
+
+	m_cube_vao.Bind();
+
+	m_programSkybox.Use();
+	m_programSkybox.SetUniform("MVP", m_camera.GetViewProj() * glm::translate(m_camera.GetEye()));
+
+	// Set the cube map texture to the 0th sampler (in the shader too)
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_CUBE_MAP, m_skyboxTexture);
+	glUniform1i(m_programSkybox.GetLocation("skyboxTexture"), 0);
+
+	// The last 3 rows <=> m_programSkybox.SetCubeTexture("skyboxTexture", 0, m_skyboxTexture);
+
+	glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_SHORT, 0);
+
+	// Finally set it back
+	glDepthFunc(prevDepthFnc);
+
 	// 3.
 	// User Interface
-
 	ImGui::ShowTestWindow(); // Demo of all ImGui commands. See its implementation for details.
 		// It's worth browsing imgui.h, as well as reading the FAQ at the beginning of imgui.cpp.
 		// There is no regular documentation, but the things mentioned above should be sufficient.

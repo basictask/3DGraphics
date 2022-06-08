@@ -134,10 +134,22 @@
     <None Include="Includes\VertexArrayObject.inl">
       <Filter>GL utilities</Filter>
     </None>
+    <None Include="Shaders\deferredPoint.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\deferredPoint.vert">
+      <Filter>Shaders</Filter>
+    </None>
     <None Include="Shaders\myFrag.frag">
       <Filter>Shaders</Filter>
     </None>
     <None Include="Shaders\myVert.vert">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\skybox.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="Shaders\skybox.vert">
       <Filter>Shaders</Filter>
     </None>
   </ItemGroup>

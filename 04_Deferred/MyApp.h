@@ -49,11 +49,15 @@ protected:
 
 	// variables for shaders
 	ProgramObject		m_program;				// basic program for shaders
+	ProgramObject		m_programSkybox;	// skybox shaders
 	ProgramObject		m_deferredPointlight;	// A deffered shader program to draw point lightsources
 
 	Texture2D			m_textureMetal;
+	Texture2D			m_texture;
+	TextureCubeMap		m_skyboxTexture;
 
 	VertexArrayObject	m_vao;
+	VertexArrayObject	m_cube_vao;				// VAO objects
 	std::unique_ptr<Mesh>	m_mesh;
 
 	gCamera				m_camera;

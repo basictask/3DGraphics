@@ -49,3 +49,4 @@ private:
 #include "TextureObject.inl"
 
 using Texture2D = TextureObject<>;
+using TextureCubeMap = TextureObject<TextureType::TextureCubeMap>;
