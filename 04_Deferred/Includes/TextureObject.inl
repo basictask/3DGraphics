@@ -57,7 +57,7 @@ template<TextureType type>
 inline void TextureObject<type>::AttachFromFile(const std::string& filename, bool generateMipMap, GLuint role)
 {
 	SDL_Surface* loaded_img = IMG_Load(filename.c_str());
-
+	GLenum source_format = loaded_img->format->BytesPerPixel == 3 ? GL_RGB : GL_RGBA;
 	int img_mode = 0;
 
 	if (loaded_img == 0)
@@ -80,15 +80,15 @@ inline void TextureObject<type>::AttachFromFile(const std::string& filename, boo
 
 	glBindTexture(static_cast<GLenum>(type), m_id);
 	glTexImage2D(
-		static_cast<GLenum>(type),	// the binding point that holds the texture
-		0,							// level-of-detail
-		GL_RGB,						// texture's internal format (GPU side)
-		loaded_img->w,				// width
-		loaded_img->h,				// height
-		0,							// must be 0 ( https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glTexImage2D.xhtml )
-		img_mode,					// source (CPU side) format
-		GL_UNSIGNED_BYTE,			// data type of the pixel data (CPU side)
-		loaded_img->pixels);		// pointer to the data
+		role,					// the binding point that holds the texture
+		0,						// level-of-detail
+		GL_RGBA,				// texture's internal format (GPU side)
+		loaded_img->w,			// width
+		loaded_img->h,			// height
+		0,						// must be 0 ( https://www.khronos.org/registry/OpenGL-Refpages/gl4/html/glTexImage2D.xhtml )
+		source_format,			// source (CPU side) format
+		GL_UNSIGNED_BYTE,		// data type of the pixel data (CPU side)
+		loaded_img->pixels);	// pointer to the data
 
 	if (generateMipMap)
 		glGenerateMipmap(static_cast<GLenum>(type));

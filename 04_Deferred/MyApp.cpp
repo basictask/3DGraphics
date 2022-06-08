@@ -23,11 +23,7 @@ bool CMyApp::Init()
 	m_program.Init({			// Shader for drawing geometries
 		{ GL_VERTEX_SHADER,   "Shaders/myVert.vert" },
 		{ GL_FRAGMENT_SHADER, "Shaders/myFrag.frag" }
-	}/*,{						// This part is now shader defined!!
-		{ 0, "vs_in_pos"	},	// VAO index 0 will be vs_in_pos
-		{ 1, "vs_in_normal" },	// VAO index 1 will be vs_in_normal
-		{ 2, "vs_out_tex0"	},	// VAO index 2 will be vs_in_tex0
-	}*/);
+	});
 	m_programSkybox.Init({
 		{ GL_VERTEX_SHADER,			"Shaders/skybox.vert" },
 		{ GL_FRAGMENT_SHADER,		"Shaders/skybox.frag" }
@@ -39,27 +35,23 @@ bool CMyApp::Init()
 
 	if (glGetError() != GL_NO_ERROR) { std::cout << "Error after shader compilation.\n"; exit(1); }
 
-	//
-	// Defining geometry (std::vector<...>) and upload to GPU buffers (m_buffer*) with BufferData
-	//
-
+	// Defining geometry
+	// 
 	// Position of vertices:
 	/*	The constructor of cube_positions has already created a GPU buffer identifier, and the following BufferData call will
 		1. bind this to GL_ARRAY_BUFFER (because the type of cube_positions is ArrayBuffer) and
 		2. upload the values of the container given in the argument to the GPU by calling glBufferData
 	*/
-
 	static ArrayBuffer cube_positions(std::vector<glm::vec3>{
 		/*back face:*/	glm::vec3(-1, -1, -1), glm::vec3(1, -1, -1), glm::vec3(1, 1, -1), glm::vec3(-1, 1, -1),
-			/*front face:*/	glm::vec3(-1, -1, 1), glm::vec3(1, -1, 1), glm::vec3(1, 1, 1), glm::vec3(-1, 1, 1),
+		/*front face:*/	glm::vec3(-1, -1, 1),  glm::vec3(1, -1,  1), glm::vec3(1, 1,  1), glm::vec3(-1, 1,  1),
 	});
 
 	// And the indices which the primitives are constructed by (from the arrays defined above) - prepared to draw them as a triangle list
-	// !!!! Unfortunately OpenGL or the driver does not view the index buffer as an attachment to the VAO so it is would be deleted normally
 	static IndexBuffer cube_indices(std::vector<uint16_t>{
 		/*back: */ 0, 1, 2, 2, 3, 0, /*front:*/ 4, 6, 5, 6, 4, 7,
-			/*left: */ 0, 3, 4, 4, 3, 7, /*right:*/ 1, 5, 2, 5, 6, 2,
-			/*bottom:*/1, 0, 4, 1, 4, 5, /*top:  */ 3, 2, 6, 3, 6, 7,
+		/*left: */ 0, 3, 4, 4, 3, 7, /*right:*/ 1, 5, 2, 5, 6, 2,
+		/*bottom:*/1, 0, 4, 1, 4, 5, /*top:  */ 3, 2, 6, 3, 6, 7,
 	});
 
 	// Registering geometry in VAO
