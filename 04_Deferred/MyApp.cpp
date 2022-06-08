@@ -172,33 +172,33 @@ void CMyApp::DrawScene(const glm::mat4& viewProj, ProgramObject& program)
 
 void CMyApp::Render()
 {
-	// 1.
-	// Render to the framebuffer
+	// 1. Render to the framebuffer
 	glBindFramebuffer(GL_FRAMEBUFFER, m_frameBuffer);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-	
+
+	// 2. Draw scene with monkeys
 	DrawScene(m_camera.GetViewProj(), m_program);
 
-	// 2. Draw Lights by additions
-	// 2.1. Setting up the blending
+	// 3. Draw Lights by additions
+	// 3.1. Setting up the blending
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glClearColor(0, 0, 0, 1);		//Clear to black
+	glClearColor(0, 0, 0, 1);				// Clear to black
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	glDisable(GL_DEPTH_TEST);		// Depth test is not performed -- all fragments should add color
-	glDepthMask(GL_FALSE);			// Depth values are not need to be written
+	glDisable(GL_DEPTH_TEST);				// Depth test is not performed -- all fragments should add color
+	glDepthMask(GL_FALSE);					// Depth values are not need to be written
 
-	glEnable(GL_BLEND);				// Instead of overwriting pixels in the FBO we
-	glBlendEquation(GL_FUNC_ADD);	// perform addition for each pixel and thus
-	glBlendFunc(GL_ONE, GL_ONE);	// summing the contribution of each light source
+	glEnable(GL_BLEND);						// Instead of overwriting pixels in the FBO we
+	glBlendEquation(GL_FUNC_ADD);			// Perform addition for each pixel and thus
+	glBlendFunc(GL_ONE, GL_ONE);			// Summing the contribution of each light source
 
-	// 2.2. Light program setup
+	// 3.2. Light program setup
 	m_deferredPointlight.Use();
 	m_deferredPointlight.SetTexture("diffuseTexture" , 0, m_diffuseBuffer);
 	m_deferredPointlight.SetTexture("normalTexture"  , 1, m_normalBuffer);
 	m_deferredPointlight.SetTexture("positionTexture", 2, m_position_Buffer);
-	
-	// 2.3. Draw point lights
+
+	// 3.3. Draw point lights
 	m_deferredPointlight.SetUniform("lightPos", m_light_pos);
 	m_deferredPointlight.SetUniform("Ld", glm::vec4(1,0.8,0.5,1));
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); // First light
@@ -208,15 +208,16 @@ void CMyApp::Render()
 	m_deferredPointlight.SetUniform("Ld", glm::vec4(0.5, 1, 1, 1));
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); // Second light
 	
-	// 3. Skybox
+	// 4. Skybox
+	glEnable(GL_DEPTH_TEST);
 	DrawSkyBox(m_camera.GetViewProj(), m_program);
-	
+
 	// Undo the blending options
 	glEnable(GL_DEPTH_TEST);
 	glDepthMask(GL_TRUE);
 	glDisable(GL_BLEND);
 
-	// 4.
+	// 5.
 	// User Interface
 	ImGui::ShowTestWindow(); // Demo of all ImGui commands. See its implementation for details.
 	ImGui::SetNextWindowPos(ImVec2(300, 400), ImGuiSetCond_FirstUseEver);
