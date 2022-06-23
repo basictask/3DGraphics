@@ -192,8 +192,8 @@
     <None Include="Includes\ProgramObject.inl" />
     <None Include="Includes\TextureObject.inl" />
     <None Include="Includes\VertexArrayObject.inl" />
-    <None Include="Shaders\deferredPoint.frag" />
-    <None Include="Shaders\deferredPoint.vert" />
+    <None Include="Shaders\shadow_map.frag" />
+    <None Include="Shaders\shadow_map.vert" />
     <None Include="Shaders\myFrag.frag" />
     <None Include="Shaders\myVert.vert" />
     <None Include="Shaders\skybox.frag" />

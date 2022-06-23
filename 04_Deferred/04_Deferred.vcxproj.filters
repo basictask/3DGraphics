@@ -134,10 +134,10 @@
     <None Include="Includes\VertexArrayObject.inl">
       <Filter>GL utilities</Filter>
     </None>
-    <None Include="Shaders\deferredPoint.frag">
+    <None Include="Shaders\shadow_map.frag">
       <Filter>Shaders</Filter>
     </None>
-    <None Include="Shaders\deferredPoint.vert">
+    <None Include="Shaders\shadow_map.vert">
       <Filter>Shaders</Filter>
     </None>
     <None Include="Shaders\myFrag.frag">

@@ -45,29 +45,35 @@ public:
 protected:
 	// FBO creating function
 	void CreateFrameBuffer(int width, int height);
-	void DrawScene(const glm::mat4& viewProj, ProgramObject& program);
+	void DrawScene(const glm::mat4& viewProj, ProgramObject& program, bool shadow);
 	void DrawSkyBox(const glm::mat4& viewProj, ProgramObject& program);
 
 	// variables for shaders
-	ProgramObject		m_program;				// basic program for shaders
+	ProgramObject		m_program;			// basic program for shaders
 	ProgramObject		m_programSkybox;	// skybox shaders
-	ProgramObject		m_deferredPointlight;	// A deffered shader program to draw point lightsources
+	ProgramObject		m_shadowProgram;	// A deffered shader program to draw point lightsources
 
 	Texture2D			m_textureMetal;
 	Texture2D			m_texture;
 	TextureCubeMap		m_skyboxTexture;
 
 	VertexArrayObject	m_vao;
-	VertexArrayObject	m_cube_vao;				// VAO objects
-	std::unique_ptr<Mesh>	m_mesh;
-
+	VertexArrayObject	m_cube_vao;				
 	gCamera				m_camera;
 
+	std::unique_ptr<Mesh>	m_mesh;
+
+	int	m_width  = 1024; 
+	int m_height = 1024;
+
+	glm::vec3 m_light_dir = glm::normalize(glm::vec3(0, -1, -1));
 	glm::vec3 m_light_pos = glm::vec3(0, 10, 0);
+	glm::mat4 m_light_mvp;
 	float	m_filterWeight{};
 
 	// stuffs for the FBO
 	bool m_frameBufferCreated{ false };
+	GLuint m_shadow_texture;
 	GLuint m_frameBuffer;
 	GLuint m_diffuseBuffer;
 	GLuint m_normalBuffer;

@@ -18,23 +18,30 @@ bool CMyApp::Init()
 {
 	glClearColor(0.2, 0.4, 0.7, 1);	// Clear color is bluish
 	glEnable(GL_CULL_FACE);			// Drop faces looking backwards
-	glEnable(GL_DEPTH_TEST);			// Enable depth test
-	//glDisable(GL_DEPTH_TEST);			// Enable depth test
+	glEnable(GL_DEPTH_TEST);		// Enable depth test
 	glEnable(GL_DEPTH_CLAMP);		// Enable depth clamp
 
-	m_program.Init({			// Shader for drawing geometries
-		{ GL_VERTEX_SHADER,   "Shaders/myVert.vert" },
-		{ GL_FRAGMENT_SHADER, "Shaders/myFrag.frag" }
+	// Initialize shaders
+	m_program.Init({				// Default shader
+		{ GL_VERTEX_SHADER,			"Shaders/myVert.vert" },
+		{ GL_FRAGMENT_SHADER,		"Shaders/myFrag.frag" }
+	},{
+		{ 0, "vs_in_pos" },
+		{ 1, "vs_in_normal" },
+		{ 2, "vs_out_tex0" },
 	});
-	m_programSkybox.Init({
+	m_programSkybox.Init({			// Skybox shader
 		{ GL_VERTEX_SHADER,			"Shaders/skybox.vert" },
 		{ GL_FRAGMENT_SHADER,		"Shaders/skybox.frag" }
 	});
-	m_deferredPointlight.Init({ // A deferred shader for point lights
-		{ GL_VERTEX_SHADER,		"Shaders/deferredPoint.vert" },
-		{ GL_FRAGMENT_SHADER,	"Shaders/deferredPoint.frag" }
+	m_shadowProgram.Init({		// Shadowmap shader
+		{ GL_VERTEX_SHADER,		"Shaders/shadow_map.vert" },
+		{ GL_FRAGMENT_SHADER,	"Shaders/shadow_map.frag" }
 	});
 
+	//-------------
+	// Skybox stuff
+	//-------------
 	if (glGetError() != GL_NO_ERROR) { std::cout << "Error after shader compilation.\n"; exit(1); }
 
 	// Defining geometry
@@ -66,7 +73,6 @@ bool CMyApp::Init()
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
 
-	// Creating VBOs for the quad
 	ArrayBuffer positions(std::vector<glm::vec3>{glm::vec3(-20, 0, -20), glm::vec3(-20, 0, 20), glm::vec3(20, 0, -20), glm::vec3(20, 0, 20)});
 	ArrayBuffer normals(std::vector<glm::vec3>{glm::vec3(0, 1, 0), glm::vec3(0, 1, 0), glm::vec3(0, 1, 0), glm::vec3(0, 1, 0)});
 	ArrayBuffer texture(std::vector<glm::vec2>{glm::vec2(0, 0), glm::vec2(0, 1), glm::vec2(1, 0), glm::vec2(1, 1)});
@@ -79,6 +85,9 @@ bool CMyApp::Init()
 	m_vao.SetIndices(indices);
 	m_vao.Unbind();
 
+	//-------------
+	// Mesh and tex
+	//-------------
 	// Loading mesh
 	m_textureMetal.FromFile("Assets/texture.png");
 
@@ -137,17 +146,24 @@ void CMyApp::DrawSkyBox(const glm::mat4& viewProj, ProgramObject& program)
 	glDepthFunc(prevDepthFnc); // Finally set it back
 }
 
-void CMyApp::DrawScene(const glm::mat4& viewProj, ProgramObject& program)
+void CMyApp::DrawScene(const glm::mat4& viewProj, ProgramObject& program, bool shadow = false)
 {
 	program.Use();
 
-	// Only texture information is needed, no lights.
-	program.SetTexture("texImage", 0, m_textureMetal);
+	if (!shadow) {
+		program.SetTexture("textureShadow", 1, m_shadow_texture); // depth values
+		program.SetTexture("texImage", 0, m_textureMetal);
+		program.SetUniform("shadowVP", m_light_mvp); //so we can read the shadow map
+		program.SetUniform("toLight", -m_light_dir);
+	}
 
 	// Drawing the plane underneath
 	program.SetUniform("MVP", viewProj * glm::mat4(1));
-	program.SetUniform("world", glm::mat4(1));
-	program.SetUniform("worldIT", glm::mat4(1));
+	if (!shadow) {
+		program.SetUniform("world", glm::mat4(1));
+		program.SetUniform("worldIT", glm::mat4(1));
+		program.SetUniform("Kd", glm::vec4(0.1, 0.9, 0.3, 1));
+	}
 
 	m_vao.Bind();
 	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);	//Draws exactly the same but uses index buffer:
@@ -170,63 +186,62 @@ void CMyApp::DrawScene(const glm::mat4& viewProj, ProgramObject& program)
 	program.Unuse();
 }
 
+// Shadow map content (partly) from: https://learnopengl.com/Advanced-Lighting/Shadows/Shadow-Mapping
 void CMyApp::Render()
 {
-	// 1. Render to the framebuffer
-	glBindFramebuffer(GL_FRAMEBUFFER, m_frameBuffer);
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	//------------------------
+	// Render from light's POV
+	//------------------------
+	// Draw scene to shadow map
+	glBindFramebuffer(GL_FRAMEBUFFER, m_frameBuffer);	// FBO that has the shadow map attached to it
+	glViewport(0, 0, 1024, 1024);						// Set which pixels to render to within this fbo.
+	glClear(GL_DEPTH_BUFFER_BIT);						// Clear depth values 
 
-	// 2. Draw scene with monkeys
-	DrawScene(m_camera.GetViewProj(), m_program);
+	// Light properties
+	glm::vec3 lightInvDir = glm::vec3(0.5f, 7, 7);
+	glm::vec3 lightPos(0, 15, 50);
+	glm::mat4 depthProjectionMatrix = glm::perspective<float>(glm::radians(45.0f), 1.0f, 2.0f, 50.0f);
+	glm::mat4 depthViewMatrix = glm::lookAt(lightPos, lightPos - lightInvDir, glm::vec3(0, 1, 0));
 
-	// 3. Draw Lights by additions
-	// 3.1. Setting up the blending
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-	glClearColor(0, 0, 0, 1);				// Clear to black
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	// Model and projection matrix
+	glm::mat4 depthModelMatrix = glm::mat4(1.0);
+	m_light_mvp = depthProjectionMatrix * depthViewMatrix * depthModelMatrix;
 
-	glDisable(GL_DEPTH_TEST);				// Depth test is not performed -- all fragments should add color
-	glDepthMask(GL_FALSE);					// Depth values are not need to be written
+	// Bias term 
+	glm::mat4 biasMatrix(
+		0.5, 0.0, 0.0, 0.0,
+		0.0, 0.5, 0.0, 0.0,
+		0.0, 0.0, 0.5, 0.0,
+		0.5, 0.5, 0.5, 1.0);
 
-	glEnable(GL_BLEND);						// Instead of overwriting pixels in the FBO we
-	glBlendEquation(GL_FUNC_ADD);			// Perform addition for each pixel and thus
-	glBlendFunc(GL_ONE, GL_ONE);			// Summing the contribution of each light source
+	glm::mat4 depthBiasMVP = biasMatrix * m_light_mvp;
+	DrawScene(depthBiasMVP, m_shadowProgram, true);		// Render
 
-	// 3.2. Light program setup
-	m_deferredPointlight.Use();
-	m_deferredPointlight.SetTexture("diffuseTexture" , 0, m_diffuseBuffer);
-	m_deferredPointlight.SetTexture("normalTexture"  , 1, m_normalBuffer);
-	m_deferredPointlight.SetTexture("positionTexture", 2, m_position_Buffer);
-
-	// 3.3. Draw point lights
-	m_deferredPointlight.SetUniform("lightPos", m_light_pos);
-	m_deferredPointlight.SetUniform("Ld", glm::vec4(1,0.8,0.5,1));
-	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); // First light
+	//-------------------------
+	// Render from camera's POV
+	//-------------------------
+	// Draw mesh to screen
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);				// default framebuffer (the backbuffer)
+	glViewport(0, 0, m_width, m_height);				// We need to set the render area back
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);	// clearing the default fbo
+	DrawScene(m_camera.GetViewProj(), m_program, false);
 	
-	float t = SDL_GetTicks() / 1000.f;
-	m_deferredPointlight.SetUniform("lightPos", 10.f*glm::vec3(cosf(t),0.5,sinf(t)));
-	m_deferredPointlight.SetUniform("Ld", glm::vec4(0.5, 1, 1, 1));
-	glDrawArrays(GL_TRIANGLE_STRIP, 0, 4); // Second light
-	
-	// 4. Skybox
+	//------------------------
+	//    Render the Skybox 
+	//------------------------
 	glEnable(GL_DEPTH_TEST);
 	DrawSkyBox(m_camera.GetViewProj(), m_program);
 
-	// Undo the blending options
-	glEnable(GL_DEPTH_TEST);
-	glDepthMask(GL_TRUE);
-	glDisable(GL_BLEND);
-
-	// 5.
-	// User Interface
-	ImGui::ShowTestWindow(); // Demo of all ImGui commands. See its implementation for details.
+	//------------------------
+	//     Render the UI
+	//------------------------
+	ImGui::ShowTestWindow();
 	ImGui::SetNextWindowPos(ImVec2(300, 400), ImGuiSetCond_FirstUseEver);
-	if(ImGui::Begin("Test window")) // Note that ImGui returns false when window is collapsed so we can early-out
+	ImGui::Begin("Test window");
 	{
-		ImGui::SliderFloat3("light_pos", &m_light_pos.x, -10.f, 10.f);
-		ImGui::Image((ImTextureID)m_diffuseBuffer  , ImVec2(256, 256), ImVec2(0,1), ImVec2(1,0));
-		ImGui::Image((ImTextureID)m_normalBuffer   , ImVec2(256, 256), ImVec2(0,1), ImVec2(1,0));
-		ImGui::Image((ImTextureID)m_position_Buffer, ImVec2(256, 256), ImVec2(0,1), ImVec2(1,0));
+		ImGui::SliderFloat3("light_dir", &m_light_dir.x, -1.f, 1.f);
+		m_light_dir = glm::normalize(m_light_dir);
+		ImGui::Image((ImTextureID)m_shadow_texture, ImVec2(256, 256));
 	}
 	ImGui::End();
 }
@@ -278,73 +293,30 @@ inline void setTexture2DParameters(GLenum magfilter = GL_LINEAR, GLenum minfilte
 
 void CMyApp::CreateFrameBuffer(int width, int height)
 {
+	// Framebuffer creation code from: 03 - Shadows project
 	// Clear if the function is not being called for the first time
-	if (m_frameBufferCreated)
-	{
-		glDeleteTextures(1, &m_diffuseBuffer);
-		glDeleteTextures(1, &m_normalBuffer);
-		glDeleteTextures(1, &m_position_Buffer);
-		glDeleteRenderbuffers(1, &m_depthBuffer);
+	if (m_frameBufferCreated) {
+		glDeleteTextures(1, &m_shadow_texture);
 		glDeleteFramebuffers(1, &m_frameBuffer);
 	}
 
 	glGenFramebuffers(1, &m_frameBuffer);
 	glBindFramebuffer(GL_FRAMEBUFFER, m_frameBuffer);
 
-	// 1.  Diffuse colors
-	glGenTextures(1, &m_diffuseBuffer);
-	glBindTexture(GL_TEXTURE_2D, m_diffuseBuffer);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_FLOAT, nullptr);
-	setTexture2DParameters(GL_NEAREST, GL_NEAREST);
+	glGenTextures(1, &m_shadow_texture); // Create texture holding the depth components
+	glBindTexture(GL_TEXTURE_2D, m_shadow_texture);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT24, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, 0);
+	setTexture2DParameters(GL_NEAREST, GL_NEAREST); //so its shorter
 
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + 0, GL_TEXTURE_2D, m_diffuseBuffer, 0);
-	if (glGetError() != GL_NO_ERROR) {
-		std::cout << "Error creating color attachment 0" << std::endl;		
-		exit(1);
-	}
-
-	// 2.  Normal vectors
-	glGenTextures(1, &m_normalBuffer);
-	glBindTexture(GL_TEXTURE_2D, m_normalBuffer);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_FLOAT, nullptr);
-	setTexture2DParameters(GL_NEAREST, GL_NEAREST);
-
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + 1, GL_TEXTURE_2D, m_normalBuffer, 0);
-	if (glGetError() != GL_NO_ERROR) {
-		std::cout << "Error creating color attachment 1" << std::endl;
-		exit(1);
-	}
-
-	// 3.  Word-space positions
-	glGenTextures(1, &m_position_Buffer);
-	glBindTexture(GL_TEXTURE_2D, m_position_Buffer);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB32F, width, height, 0, GL_RGB, GL_FLOAT, nullptr);
-	setTexture2DParameters(GL_NEAREST, GL_NEAREST);
-
-	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + 2, GL_TEXTURE_2D, m_position_Buffer, 0);
-	if (glGetError() != GL_NO_ERROR) {
-		std::cout << "Error creating color attachment 2" << std::endl;
-		exit(1);
-	}
-
-	// 4. Depth renderbuffer
-	glGenRenderbuffers(1, &m_depthBuffer);
-	glBindRenderbuffer(GL_RENDERBUFFER, m_depthBuffer);
-	glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, width, height);
-	glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, m_depthBuffer);
+	glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, m_shadow_texture, 0);
 	if (glGetError() != GL_NO_ERROR) {
 		std::cout << "Error creating depth attachment" << std::endl;
 		exit(1);
 	}
 
-	//Specifying which color outputs are active
-	GLenum drawBuffers[3] = {GL_COLOR_ATTACHMENT0,
-							 GL_COLOR_ATTACHMENT1,
-							 GL_COLOR_ATTACHMENT2 };
-	glDrawBuffers(3, drawBuffers);
+	glDrawBuffer(GL_NONE); // No need for any color output!
 
-	// -- Completeness check
-	GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+	GLenum status = glCheckFramebufferStatus(GL_FRAMEBUFFER); // -- Completeness check
 	if (status != GL_FRAMEBUFFER_COMPLETE) {
 		std::cout << "Incomplete framebuffer (";
 		switch (status) {
@@ -353,10 +325,10 @@ void CMyApp::CreateFrameBuffer(int width, int height)
 		case GL_FRAMEBUFFER_UNSUPPORTED:					std::cout << "GL_FRAMEBUFFER_UNSUPPORTED";					break;
 		}
 		std::cout << ")" << std::endl;
+		char ch; std::cin >> ch;
 		exit(1);
 	}
 
-	// -- Unbind framebuffer
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);	// -- Unbind framebuffer
 	m_frameBufferCreated = true;
 }
