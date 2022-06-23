@@ -198,8 +198,8 @@ void CMyApp::Render()
 	glClear(GL_DEPTH_BUFFER_BIT);						// Clear depth values 
 
 	// Light properties
-	glm::vec3 lightInvDir = glm::vec3(0.5f, 7, 7);
-	glm::vec3 lightPos(0, 15, 50);
+	static glm::vec3 lightInvDir = glm::vec3(0.5f, 7, 7);
+	static glm::vec3 lightPos(0, 15, 20);
 	glm::mat4 depthProjectionMatrix = glm::perspective<float>(glm::radians(45.0f), 1.0f, 2.0f, 50.0f);
 	glm::mat4 depthViewMatrix = glm::lookAt(lightPos, lightPos - lightInvDir, glm::vec3(0, 1, 0));
 
@@ -239,7 +239,8 @@ void CMyApp::Render()
 	ImGui::SetNextWindowPos(ImVec2(300, 400), ImGuiSetCond_FirstUseEver);
 	ImGui::Begin("Test window");
 	{
-		ImGui::SliderFloat3("light_dir", &m_light_dir.x, -1.f, 1.f);
+		ImGui::SliderFloat3("light_dir", &lightInvDir.x, -1.f, 1.f);
+		ImGui::SliderFloat3("light_pos", &lightPos.x, -10.f, 10.f);
 		m_light_dir = glm::normalize(m_light_dir);
 		ImGui::Image((ImTextureID)m_shadow_texture, ImVec2(256, 256));
 	}
